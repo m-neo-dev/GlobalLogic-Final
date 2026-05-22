@@ -266,6 +266,17 @@
         background: #fff8d6;
         box-shadow: inset 0 0 0 1.5px #e6b800;
       }
+      tbody tr td:has(input:disabled) {
+        background: #e0e0e0 !important;
+        color: #777;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      tbody tr td input:disabled {
+        background: #e0e0e0;
+        color: #777;
+        cursor: not-allowed;
+      }
 
       /* Column Widths */
       th:nth-child(1) {

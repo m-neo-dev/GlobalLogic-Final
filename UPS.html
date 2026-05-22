@@ -167,6 +167,19 @@
       background: transparent;
     }
 
+    tbody tr td:has(input:disabled) {
+      background: #e0e0e0 !important;
+      color: #777;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    tbody tr td input:disabled {
+      background: #e0e0e0;
+      color: #777;
+      cursor: not-allowed;
+    }
+
     td.val-high {
       background-color: #ffe6e6 !important;
     }
