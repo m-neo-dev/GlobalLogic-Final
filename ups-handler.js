@@ -10,7 +10,7 @@ async function saveUPSChecklist() {
 
     // Get date
     const dateInput = document.querySelector('input[type="date"]');
-    const date = dateInput?.value || new Date().toISOString().split('T')[0];
+    const date = dateInput?.value || getIndiaDateStringForChecklistClient();
 
     // Get UPS unit
     const upsUnitSelect = document.getElementById('ups-unit');

@@ -612,6 +612,7 @@
       </div>
     </div>
 
+    <script src="checklist-time-locks.js"></script>
     <script>
       const SHEET_ID = "SERVER_ROOM_LOG_006";
       const TIMES = [
@@ -748,6 +749,12 @@
         document.getElementById("sig-employee").value = saved["sig_emp"] || "";
 
         applyAllThresholds();
+        markCurrentValuesLocked("#data-body input[data-row]");
+        refreshChecklistCellLocks({
+          rowSelector: "#data-body tr",
+          dateInputId: "check-date",
+          times: TIMES,
+        });
       }
 
       async function saveData() {
@@ -800,6 +807,12 @@
 
           if (response.success) {
             showNotification(`✓ Server Room checklist saved! ID: ${response.id}`, 'success');
+            markCurrentValuesLocked("#data-body input[data-row]");
+            refreshChecklistCellLocks({
+              rowSelector: "#data-body tr",
+              dateInputId: "check-date",
+              times: TIMES,
+            });
           } else {
             showNotification(`✗ Error: ${response.message}`, 'error');
           }
@@ -849,6 +862,12 @@
                   if (inputs[REMARKS_COL]) inputs[REMARKS_COL].value = reading.notes || "";
                 }
               });
+              markCurrentValuesLocked("#data-body input[data-row]");
+              refreshChecklistCellLocks({
+                rowSelector: "#data-body tr",
+                dateInputId: "check-date",
+                times: TIMES,
+              });
               showNotification(`✓ Loaded latest record from ${dateStr}`, 'success');
             }
           } else {
@@ -897,11 +916,15 @@
         link.click();
       }
 
-      document.getElementById("check-date").value = new Date()
-        .toISOString()
-        .split("T")[0];
+      setDefaultIndiaDate("check-date");
       loadSettings();
       buildRows();
+      setupChecklistCellLocks({
+        rowSelector: "#data-body tr",
+        dateInputId: "check-date",
+        times: TIMES,
+        onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
+      });
       loadDateData();
     </script>
 

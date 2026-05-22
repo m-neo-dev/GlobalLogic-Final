@@ -5,6 +5,24 @@
 
 const API_BASE_URL = 'https://globallogic-final.onrender.com/api';
 
+function getIndiaDateStringForChecklistClient() {
+  if (typeof getIndiaToday === 'function') return getIndiaToday();
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const map = {};
+  parts.forEach(part => {
+    if (part.type !== 'literal') map[part.type] = part.value;
+  });
+
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
 // ==================== HUB ROOM API ====================
 
 const HubRoomAPI = {
@@ -255,7 +273,7 @@ const UPSAPI = {
  */
 function collectChecklistData(formType) {
   const data = {
-    date: document.querySelector('input[type="date"]')?.value || new Date().toISOString().split('T')[0],
+    date: document.querySelector('input[type="date"]')?.value || getIndiaDateStringForChecklistClient(),
     readings: [],
     checkedBy: document.querySelector('input[name="checkedBy"]')?.value || '',
     supervisorName: document.querySelector('input[name="supervisorName"]')?.value || '',

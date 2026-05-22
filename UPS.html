@@ -298,6 +298,7 @@
 
   <script src="notification-helper.js"></script>
   <script src="api-client.js"></script>
+  <script src="checklist-time-locks.js"></script>
   <script>
     const TIMES = ["0:00", "2:00", "4:00", "6:00", "8:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
     // 18 data columns + 1 signature column = 19 input columns
@@ -354,7 +355,10 @@
         const rows = document.querySelectorAll("#data-body tr");
         rows.forEach((row) => {
           const inputs = row.querySelectorAll("input");
-          const reading = { time: row.querySelector(".time-label").textContent };
+          const reading = {
+            time: row.querySelector(".time-label").textContent,
+            _row: Number(row.querySelector("input[data-row]")?.dataset.row || 0)
+          };
           let hasData = false;
           inputs.forEach((inp, ci) => {
             const val = inp.value.trim();
@@ -378,6 +382,12 @@
         if (response.success) {
           showNotification("✓ Data saved to database", "success");
           localStorage.setItem(`UPS_${data.upsUnit}_${data.date}`, JSON.stringify(data));
+          markCurrentValuesLocked("#data-body input[data-row]");
+          refreshChecklistCellLocks({
+            rowSelector: "#data-body tr",
+            dateInputId: "check-date",
+            times: TIMES,
+          });
         } else {
           showNotification("✗ Save failed: " + response.message, "error");
         }
@@ -397,13 +407,21 @@
 
         const rows = document.querySelectorAll("#data-body tr");
         record.readings.forEach((rd, ri) => {
-          if (rows[ri]) {
-            const inputs = rows[ri].querySelectorAll("input");
+          const rowIndex = TIMES.indexOf(rd.time);
+          const row = rows[rowIndex >= 0 ? rowIndex : ri];
+          if (row) {
+            const inputs = row.querySelectorAll("input");
             inputs.forEach((inp, ci) => {
               inp.value = rd[`col${ci}`] ?? "";
               checkThreshold(inp);
             });
           }
+        });
+        markCurrentValuesLocked("#data-body input[data-row]");
+        refreshChecklistCellLocks({
+          rowSelector: "#data-body tr",
+          dateInputId: "check-date",
+          times: TIMES,
         });
         showNotification("✓ Data loaded for UPS " + record.upsUnit);
       }
@@ -413,14 +431,42 @@
       const date = document.getElementById("check-date").value;
       const unit = document.getElementById("ups-unit").value;
       const local = JSON.parse(localStorage.getItem(`UPS_${unit}_${date}`) || "null");
+      document.querySelectorAll("#data-body input").forEach((inp) => {
+        inp.value = "";
+        checkThreshold(inp);
+      });
       if (local) {
         document.getElementById("sig-supervisor").value = local.supervisorName || "";
         document.getElementById("sig-employee").value = local.checkedBy || "";
+        const rows = document.querySelectorAll("#data-body tr");
+        (local.readings || []).forEach((rd, ri) => {
+          const rowIndex = Number.isInteger(rd._row) ? rd._row : TIMES.indexOf(rd.time);
+          const row = rows[rowIndex >= 0 ? rowIndex : ri];
+          if (row) {
+            row.querySelectorAll("input").forEach((inp, ci) => {
+              inp.value = rd[`col${ci}`] ?? "";
+              checkThreshold(inp);
+            });
+          }
+        });
       }
+      markCurrentValuesLocked("#data-body input[data-row]");
+      refreshChecklistCellLocks({
+        rowSelector: "#data-body tr",
+        dateInputId: "check-date",
+        times: TIMES,
+      });
     }
 
-    document.getElementById("check-date").value = new Date().toISOString().split("T")[0];
+    setDefaultIndiaDate("check-date");
     buildRows();
+    setupChecklistCellLocks({
+      rowSelector: "#data-body tr",
+      dateInputId: "check-date",
+      times: TIMES,
+      onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
+    });
+    loadDateData();
   </script>
 </body>
 
