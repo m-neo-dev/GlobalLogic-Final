@@ -454,6 +454,14 @@
         td {
           border: 1px solid #000 !important;
         }
+        table th,
+        table td,
+        tbody tr td:has(input:disabled),
+        td.val-high,
+        td.val-low {
+          background: white !important;
+          background-color: white !important;
+        }
         .header,
         .subheader,
         .address-banner,
@@ -477,7 +485,7 @@
       <div class="navbar-buttons">
         <button class="navbar-btn" onclick="window.print()">🖨 Print</button>
         <button class="navbar-btn" onclick="exportToCSV()">📊 Export CSV</button>
-        <button class="navbar-btn" onclick="saveData()">💾 Save</button>
+        <button class="navbar-btn" onclick="saveData()">💾 Save Data</button>
         <button class="navbar-btn home" onclick="window.location.href='index.html'">🏠 Home</button>
       </div>
     </div>
@@ -670,7 +678,12 @@
                   this.value = this.value.substring(0, this.value.length - 1);
                 }
 
-                // --- HUMIDITY RANGE VALIDATION (0-100) ---
+                if (ci === TEMP_COL && this.value !== "") {
+                  let val = parseFloat(this.value);
+                  if (val < 0) this.value = "0";
+                  if (val > 999) this.value = "999";
+                }
+
                 if (ci === HUM_COL && this.value !== "") {
                   let val = parseFloat(this.value);
                   if (val < 0) this.value = "0";

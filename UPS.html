@@ -38,6 +38,13 @@
       font-weight: 700;
     }
 
+    .navbar-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
     .navbar-btn {
       padding: 8px 14px;
       font-size: 11px;
@@ -47,12 +54,22 @@
       border: 1px solid #0d3b66;
       background: #2e7cb5;
       color: white;
-      margin-left: 5px;
+      transition: all 0.2s;
+    }
+
+    .navbar-btn:hover {
+      background: #3d92c9;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
     .navbar-btn.home {
       background: #28a745;
       border-color: #1e7e34;
+    }
+
+    .navbar-btn.home:hover {
+      background: #34b853;
     }
 
     .page-container {
@@ -219,6 +236,15 @@
         display: none;
       }
 
+      table th,
+      table td,
+      tbody tr td:has(input:disabled),
+      td.val-high,
+      td.val-low {
+        background: white !important;
+        background-color: white !important;
+      }
+
       .page {
         box-shadow: none;
         border: none;
@@ -345,6 +371,14 @@
       // Only metrics (0-17) are numeric; 18 is Signature
       if (col < SIG_COL_INDEX) {
         input.value = input.value.replace(/[^0-9.]/g, "");
+        if ((input.value.match(/\./g) || []).length > 1) {
+          input.value = input.value.substring(0, input.value.length - 1);
+        }
+        if (input.value !== "") {
+          const val = parseFloat(input.value);
+          if (val < 0) input.value = "0";
+          if (val > 999) input.value = "999";
+        }
         checkThreshold(input);
       }
     }
@@ -406,6 +440,56 @@
       } catch (e) {
         showNotification("✗ Error during save", "error");
       }
+    }
+
+    function exportToCSV() {
+      const date = document.getElementById("check-date").value;
+      const unit = document.getElementById("ups-unit").value;
+      const headers = [
+        "Time",
+        "Input Voltage RY",
+        "Input Voltage YB",
+        "Input Voltage BR",
+        "Input Current IR",
+        "Input Current IY",
+        "Input Current IB",
+        "Output Voltage RY",
+        "Output Voltage YB",
+        "Output Voltage BR",
+        "Output Current IR",
+        "Output Current IY",
+        "Output Current IB",
+        "O/P KVA",
+        "O/P KW",
+        "Hz",
+        "Battery Volt",
+        "Battery A",
+        "Room Temp. in C (22 to 24)",
+        "Technician Signature",
+      ];
+      const csv = [`Daily UPS Health Check - UPS ${unit} - ${date}\n`];
+
+      csv.push('"' + headers.join('","') + '"');
+
+      document.querySelectorAll("#data-body tr").forEach((row) => {
+        const rowData = [];
+        rowData.push('"' + row.querySelector(".time-label").innerText.trim().replace(/"/g, '""') + '"');
+        row.querySelectorAll("input").forEach((inp) => {
+          rowData.push('"' + inp.value.trim().replace(/"/g, '""') + '"');
+        });
+        csv.push(rowData.join(","));
+      });
+
+      csv.push("");
+      csv.push(`Supervisor Signature,"${document.getElementById("sig-supervisor").value.replace(/"/g, '""')}"`);
+      csv.push(`Employee Services Signature,"${document.getElementById("sig-employee").value.replace(/"/g, '""')}"`);
+
+      const blob = new Blob([csv.join("\n")], { type: "text/csv" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `UPS_${unit}_Health_Check_${date}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(link.href);
     }
 
     async function loadLatestData() {
