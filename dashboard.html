@@ -384,9 +384,11 @@
         }
 
         // Load records for a type
-        async function loadRecords(type) {
+        async function loadRecords(type, options = {}) {
             const container = document.getElementById(`${type}-records`);
-            container.innerHTML = '<div class="loading">Loading records...</div>';
+            if (!options.silent) {
+                container.innerHTML = '<div class="loading">Loading records...</div>';
+            }
 
             let api;
             switch(type) {
@@ -395,7 +397,7 @@
                 case 'ups': api = UPSAPI; break;
             }
 
-            const response = await api.getAll();
+            const response = await api.getAll({ silent: options.silent });
 
             if (response.success && response.data.length > 0) {
                 const html = response.data.map(record => `
@@ -514,7 +516,7 @@
 
         // Auto-refresh every 30 seconds
         setInterval(() => {
-            loadRecords(currentTab);
+            loadRecords(currentTab, { silent: true });
         }, 30000);
     </script>
 </body>
