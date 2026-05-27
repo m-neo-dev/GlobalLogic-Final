@@ -507,7 +507,7 @@
         <div class="capacity-cell">Daily Check Hub Room Temperature</div>
         <div class="date-cell">
           <span>Date:</span>
-          <input type="date" id="check-date" onchange="loadDateData()" />
+          <input type="date" id="check-date" onchange="loadDateData()" value="${new Date().toISOString().split('T')[0]}" />
         </div>
       </div>
 

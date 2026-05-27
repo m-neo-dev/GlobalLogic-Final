@@ -3,10 +3,8 @@
  * Add this script before closing </body> tag in HubRoom.html
  */
 
-<script src="api-client.js"></script>
-<script>
-  // HubRoom specific save handler
-  async function saveHubRoomChecklist() {
+// HubRoom specific save handler
+async function saveHubRoomChecklist() {
     try {
       disableSaveButton(true);
 
@@ -143,5 +141,4 @@
     });
 
     console.log('✓ Form data loaded');
-  }
-</script>
+}
