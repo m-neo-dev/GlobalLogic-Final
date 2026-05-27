@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 require('dotenv').config();
 
 const app = express();
+const INDIA_TIME_ZONE = 'Asia/Kolkata';
 
 // Middleware
 app.use(cors({
@@ -47,8 +48,8 @@ const hubRoomSchema = new mongoose.Schema({
   checkedBy: String,
   supervisorName: String,
   supervisorSignature: String,
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: () => new Date() },
+  updatedAt: { type: Date, default: () => new Date() }
 });
 
 // Server Room Checklist Schema
@@ -66,8 +67,8 @@ const serverRoomSchema = new mongoose.Schema({
   checkedBy: String,
   supervisorName: String,
   supervisorSignature: String,
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: () => new Date() },
+  updatedAt: { type: Date, default: () => new Date() }
 });
 
 // UPS Checklist Schema
@@ -100,14 +101,137 @@ const upsSchema = new mongoose.Schema({
   checkedBy: String,
   supervisorName: String,
   supervisorSignature: String,
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: () => new Date() },
+  updatedAt: { type: Date, default: () => new Date() }
 });
 
 // Models
 const HubRoom = mongoose.model('HubRoom', hubRoomSchema);
 const ServerRoom = mongoose.model('ServerRoom', serverRoomSchema);
 const UPS = mongoose.model('UPS', upsSchema);
+const TWO_HOUR_TIMES_24H = ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+const TWO_HOUR_TIMES_SHORT = ['0:00', '2:00', '4:00', '6:00', '8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+
+// ==================== CHECKLIST EDIT RULES ====================
+
+function getIndiaNowParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: INDIA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(now);
+
+  const map = {};
+  parts.forEach(part => {
+    if (part.type !== 'literal') map[part.type] = part.value;
+  });
+
+  const hour = map.hour === '24' ? '00' : map.hour;
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    minutes: Number(hour) * 60 + Number(map.minute)
+  };
+}
+
+function getDateRangeForRequestDate(dateString) {
+  const start = new Date(`${dateString}T00:00:00.000Z`);
+  const end = new Date(`${dateString}T23:59:59.999Z`);
+  return { start, end };
+}
+
+function timeToMinutes(timeText) {
+  const [hour, minute] = String(timeText).trim().split(':').map(Number);
+  if (!Number.isFinite(hour)) return null;
+  return hour * 60 + (Number.isFinite(minute) ? minute : 0);
+}
+
+function isFilled(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function sameCellValue(a, b) {
+  if (!isFilled(a) && !isFilled(b)) return true;
+  return String(a).trim() === String(b).trim();
+}
+
+function getActiveTimeWindowError(dateString, time, allTimes) {
+  const now = getIndiaNowParts();
+  if (dateString !== now.date) {
+    return `This checklist date is not editable now. Current India date is ${now.date}.`;
+  }
+
+  const rowIndex = allTimes.indexOf(time);
+  const start = timeToMinutes(time);
+  const next = rowIndex >= 0 && rowIndex + 1 < allTimes.length
+    ? timeToMinutes(allTimes[rowIndex + 1])
+    : 24 * 60;
+
+  if (start === null || now.minutes <= start || now.minutes >= next) {
+    return `Row ${time} is editable only after ${time} and before the next row time in India time.`;
+  }
+
+  return '';
+}
+
+async function mergeAndValidateChecklistReadings(options) {
+  const { Model, date, readings, fields, times, extraQuery = {} } = options;
+  const dateString = String(date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return { error: 'Valid checklist date is required.' };
+  }
+  const incomingReadings = Array.isArray(readings) ? readings : [];
+  const allTimes = times || Array.from(new Set(incomingReadings.map(r => r.time).filter(Boolean)));
+  const { start, end } = getDateRangeForRequestDate(dateString);
+
+  const existing = await Model.findOne({
+    date: { $gte: start, $lte: end },
+    ...extraQuery
+  }).sort({ createdAt: -1 });
+
+  if (!existing) {
+    for (const reading of incomingReadings) {
+      for (const field of fields) {
+        if (isFilled(reading[field])) {
+          const error = getActiveTimeWindowError(dateString, reading.time, allTimes);
+          if (error) return { error };
+        }
+      }
+    }
+    return { readings: incomingReadings };
+  }
+
+  const byTime = new Map();
+  existing.readings.forEach(reading => byTime.set(reading.time, reading.toObject ? reading.toObject() : reading));
+
+  for (const reading of incomingReadings) {
+    if (!reading.time) continue;
+    const existingReading = byTime.get(reading.time) || { time: reading.time };
+
+    for (const field of fields) {
+      const oldValue = existingReading[field];
+      const newValue = reading[field];
+
+      if (isFilled(oldValue)) {
+        if (isFilled(newValue) && !sameCellValue(oldValue, newValue)) {
+          return { error: `Cell ${reading.time} / ${field} already has data and cannot be edited.` };
+        }
+        existingReading[field] = oldValue;
+      } else if (isFilled(newValue)) {
+        const error = getActiveTimeWindowError(dateString, reading.time, allTimes);
+        if (error) return { error };
+        existingReading[field] = newValue;
+      }
+    }
+
+    byTime.set(reading.time, existingReading);
+  }
+
+  return { readings: Array.from(byTime.values()) };
+}
 
 // ==================== API ROUTES ====================
 
@@ -115,10 +239,24 @@ const UPS = mongoose.model('UPS', upsSchema);
 app.post('/api/hubroom/save', async (req, res) => {
   try {
     const { date, readings, checkedBy, supervisorName, supervisorSignature } = req.body;
+    const validation = await mergeAndValidateChecklistReadings({
+      Model: HubRoom,
+      date,
+      readings,
+      fields: ['temperature', 'signature', 'notes'],
+      times: TWO_HOUR_TIMES_24H
+    });
+
+    if (validation.error) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
 
     const hubRoomData = new HubRoom({
       date: new Date(date),
-      readings: readings || [],
+      readings: validation.readings || [],
       checkedBy,
       supervisorName,
       supervisorSignature
@@ -183,10 +321,24 @@ app.get('/api/hubroom/:id', async (req, res) => {
 app.post('/api/serverroom/save', async (req, res) => {
   try {
     const { date, readings, checkedBy, supervisorName, supervisorSignature } = req.body;
+    const validation = await mergeAndValidateChecklistReadings({
+      Model: ServerRoom,
+      date,
+      readings,
+      fields: ['temperature', 'humidity', 'signature', 'notes'],
+      times: TWO_HOUR_TIMES_SHORT
+    });
+
+    if (validation.error) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
 
     const serverRoomData = new ServerRoom({
       date: new Date(date),
-      readings: readings || [],
+      readings: validation.readings || [],
       checkedBy,
       supervisorName,
       supervisorSignature
@@ -251,11 +403,26 @@ app.get('/api/serverroom/:id', async (req, res) => {
 app.post('/api/ups/save', async (req, res) => {
   try {
     const { date, upsUnit, readings, checkedBy, supervisorName, supervisorSignature } = req.body;
+    const validation = await mergeAndValidateChecklistReadings({
+      Model: UPS,
+      date,
+      readings,
+      fields: Array.from({ length: 20 }, (_, index) => `col${index}`),
+      times: TWO_HOUR_TIMES_SHORT,
+      extraQuery: { upsUnit }
+    });
+
+    if (validation.error) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
 
     const upsData = new UPS({
       date: new Date(date),
       upsUnit,
-      readings: readings || [],
+      readings: validation.readings || [],
       checkedBy,
       supervisorName,
       supervisorSignature

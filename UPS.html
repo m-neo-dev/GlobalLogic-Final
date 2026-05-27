@@ -38,6 +38,13 @@
       font-weight: 700;
     }
 
+    .navbar-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
     .navbar-btn {
       padding: 8px 14px;
       font-size: 11px;
@@ -47,12 +54,22 @@
       border: 1px solid #0d3b66;
       background: #2e7cb5;
       color: white;
-      margin-left: 5px;
+      transition: all 0.2s;
+    }
+
+    .navbar-btn:hover {
+      background: #3d92c9;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
     .navbar-btn.home {
       background: #28a745;
       border-color: #1e7e34;
+    }
+
+    .navbar-btn.home:hover {
+      background: #34b853;
     }
 
     .page-container {
@@ -167,6 +184,19 @@
       background: transparent;
     }
 
+    tbody tr td:has(input:disabled) {
+      background: #e0e0e0 !important;
+      color: #777;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    tbody tr td input:disabled {
+      background: #e0e0e0;
+      color: #777;
+      cursor: not-allowed;
+    }
+
     td.val-high {
       background-color: #ffe6e6 !important;
     }
@@ -206,6 +236,15 @@
         display: none;
       }
 
+      table th,
+      table td,
+      tbody tr td:has(input:disabled),
+      td.val-high,
+      td.val-low {
+        background: white !important;
+        background-color: white !important;
+      }
+
       .page {
         box-shadow: none;
         border: none;
@@ -220,7 +259,6 @@
     <div class="navbar-buttons">
       <button class="navbar-btn" onclick="window.print()">🖨 Print</button>
       <button class="navbar-btn" onclick="exportToCSV()">📊 Export CSV</button>
-      <button class="navbar-btn" onclick="loadLatestData()">📥 Load Latest</button>
       <button class="navbar-btn" onclick="saveData()">💾 Save Data</button>
       <button class="navbar-btn home" onclick="window.location.href='index.html'">🏠 Home</button>
     </div>
@@ -298,6 +336,7 @@
 
   <script src="notification-helper.js"></script>
   <script src="api-client.js"></script>
+  <script src="checklist-time-locks.js"></script>
   <script>
     const TIMES = ["0:00", "2:00", "4:00", "6:00", "8:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
     // 18 data columns + 1 signature column = 19 input columns
@@ -332,6 +371,14 @@
       // Only metrics (0-17) are numeric; 18 is Signature
       if (col < SIG_COL_INDEX) {
         input.value = input.value.replace(/[^0-9.]/g, "");
+        if ((input.value.match(/\./g) || []).length > 1) {
+          input.value = input.value.substring(0, input.value.length - 1);
+        }
+        if (input.value !== "") {
+          const val = parseFloat(input.value);
+          if (val < 0) input.value = "0";
+          if (val > 999) input.value = "999";
+        }
         checkThreshold(input);
       }
     }
@@ -354,7 +401,10 @@
         const rows = document.querySelectorAll("#data-body tr");
         rows.forEach((row) => {
           const inputs = row.querySelectorAll("input");
-          const reading = { time: row.querySelector(".time-label").textContent };
+          const reading = {
+            time: row.querySelector(".time-label").textContent,
+            _row: Number(row.querySelector("input[data-row]")?.dataset.row || 0)
+          };
           let hasData = false;
           inputs.forEach((inp, ci) => {
             const val = inp.value.trim();
@@ -378,12 +428,68 @@
         if (response.success) {
           showNotification("✓ Data saved to database", "success");
           localStorage.setItem(`UPS_${data.upsUnit}_${data.date}`, JSON.stringify(data));
+          markCurrentValuesLocked("#data-body input[data-row]");
+          refreshChecklistCellLocks({
+            rowSelector: "#data-body tr",
+            dateInputId: "check-date",
+            times: TIMES,
+          });
         } else {
           showNotification("✗ Save failed: " + response.message, "error");
         }
       } catch (e) {
         showNotification("✗ Error during save", "error");
       }
+    }
+
+    function exportToCSV() {
+      const date = document.getElementById("check-date").value;
+      const unit = document.getElementById("ups-unit").value;
+      const headers = [
+        "Time",
+        "Input Voltage RY",
+        "Input Voltage YB",
+        "Input Voltage BR",
+        "Input Current IR",
+        "Input Current IY",
+        "Input Current IB",
+        "Output Voltage RY",
+        "Output Voltage YB",
+        "Output Voltage BR",
+        "Output Current IR",
+        "Output Current IY",
+        "Output Current IB",
+        "O/P KVA",
+        "O/P KW",
+        "Hz",
+        "Battery Volt",
+        "Battery A",
+        "Room Temp. in C (22 to 24)",
+        "Technician Signature",
+      ];
+      const csv = [`Daily UPS Health Check - UPS ${unit} - ${date}\n`];
+
+      csv.push('"' + headers.join('","') + '"');
+
+      document.querySelectorAll("#data-body tr").forEach((row) => {
+        const rowData = [];
+        rowData.push('"' + row.querySelector(".time-label").innerText.trim().replace(/"/g, '""') + '"');
+        row.querySelectorAll("input").forEach((inp) => {
+          rowData.push('"' + inp.value.trim().replace(/"/g, '""') + '"');
+        });
+        csv.push(rowData.join(","));
+      });
+
+      csv.push("");
+      csv.push(`Supervisor Signature,"${document.getElementById("sig-supervisor").value.replace(/"/g, '""')}"`);
+      csv.push(`Employee Services Signature,"${document.getElementById("sig-employee").value.replace(/"/g, '""')}"`);
+
+      const blob = new Blob([csv.join("\n")], { type: "text/csv" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `UPS_${unit}_Health_Check_${date}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(link.href);
     }
 
     async function loadLatestData() {
@@ -397,13 +503,21 @@
 
         const rows = document.querySelectorAll("#data-body tr");
         record.readings.forEach((rd, ri) => {
-          if (rows[ri]) {
-            const inputs = rows[ri].querySelectorAll("input");
+          const rowIndex = TIMES.indexOf(rd.time);
+          const row = rows[rowIndex >= 0 ? rowIndex : ri];
+          if (row) {
+            const inputs = row.querySelectorAll("input");
             inputs.forEach((inp, ci) => {
               inp.value = rd[`col${ci}`] ?? "";
               checkThreshold(inp);
             });
           }
+        });
+        markCurrentValuesLocked("#data-body input[data-row]");
+        refreshChecklistCellLocks({
+          rowSelector: "#data-body tr",
+          dateInputId: "check-date",
+          times: TIMES,
         });
         showNotification("✓ Data loaded for UPS " + record.upsUnit);
       }
@@ -413,14 +527,43 @@
       const date = document.getElementById("check-date").value;
       const unit = document.getElementById("ups-unit").value;
       const local = JSON.parse(localStorage.getItem(`UPS_${unit}_${date}`) || "null");
+      document.querySelectorAll("#data-body input").forEach((inp) => {
+        inp.value = "";
+        checkThreshold(inp);
+      });
       if (local) {
         document.getElementById("sig-supervisor").value = local.supervisorName || "";
         document.getElementById("sig-employee").value = local.checkedBy || "";
+        const rows = document.querySelectorAll("#data-body tr");
+        (local.readings || []).forEach((rd, ri) => {
+          const rowIndex = Number.isInteger(rd._row) ? rd._row : TIMES.indexOf(rd.time);
+          const row = rows[rowIndex >= 0 ? rowIndex : ri];
+          if (row) {
+            row.querySelectorAll("input").forEach((inp, ci) => {
+              inp.value = rd[`col${ci}`] ?? "";
+              checkThreshold(inp);
+            });
+          }
+        });
       }
+      markCurrentValuesLocked("#data-body input[data-row]");
+      refreshChecklistCellLocks({
+        rowSelector: "#data-body tr",
+        dateInputId: "check-date",
+        times: TIMES,
+      });
     }
 
-    document.getElementById("check-date").value = new Date().toISOString().split("T")[0];
+    setDefaultIndiaDate("check-date");
     buildRows();
+    setupChecklistCellLocks({
+      rowSelector: "#data-body tr",
+      dateInputId: "check-date",
+      times: TIMES,
+      onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
+    });
+    loadDateData();
+    window.addEventListener("load", () => loadLatestData());
   </script>
 </body>
 

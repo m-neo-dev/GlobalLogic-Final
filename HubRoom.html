@@ -246,6 +246,17 @@
         background: transparent;
         font-family: inherit;
       }
+      tbody tr td:has(input:disabled) {
+        background: #e0e0e0 !important;
+        color: #777;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      tbody tr td input:disabled {
+        background: #e0e0e0;
+        color: #777;
+        cursor: not-allowed;
+      }
 
       /* ALERT COLORS - Applied to TD for print compatibility */
       td.val-high {
@@ -432,6 +443,14 @@
         td {
           border: 1px solid #000 !important;
         }
+        table th,
+        table td,
+        tbody tr td:has(input:disabled),
+        td.val-high,
+        td.val-low {
+          background: white !important;
+          background-color: white !important;
+        }
         .header,
         .subheader,
         .address-banner,
@@ -460,8 +479,7 @@
       <div class="navbar-buttons">
         <button class="navbar-btn" onclick="window.print()">🖨 Print</button>
         <button class="navbar-btn" onclick="exportToCSV()">📊 Export CSV</button>
-        <button class="navbar-btn" id="load-btn" onclick="loadLatestData()">📥 Load Latest</button>
-        <button class="navbar-btn" onclick="saveData()">💾 Save</button>
+        <button class="navbar-btn" onclick="saveData()">💾 Save Data</button>
         <button class="navbar-btn home" onclick="window.location.href='index.html'">🏠 Home</button>
       </div>
     </div>
@@ -569,6 +587,7 @@
     </div>
     </div>
 
+    <script src="checklist-time-locks.js"></script>
     <script>
       const SHEET_ID = "SERVER_TEMP_006_V2";
       const TIMES = [
@@ -609,6 +628,11 @@
         // Prevent multiple decimals
         if ((input.value.match(/\./g) || []).length > 1) {
           input.value = input.value.substring(0, input.value.length - 1);
+        }
+        if (input.value !== "") {
+          const val = parseFloat(input.value);
+          if (val < 0) input.value = "0";
+          if (val > 999) input.value = "999";
         }
         applyThreshold(input);
       }
@@ -676,6 +700,12 @@
             localData["sig_sup"] = document.getElementById("sig-supervisor").value;
             localData["sig_emp"] = document.getElementById("sig-employee").value;
             localStorage.setItem(`${SHEET_ID}_${date}`, JSON.stringify(localData));
+            markCurrentValuesLocked('input[data-row]');
+            refreshChecklistCellLocks({
+              rowSelector: "table tbody tr",
+              dateInputId: "check-date",
+              times: TIMES,
+            });
           } else {
             showNotification(`✗ Error: ${response.message}`, 'error');
           }
@@ -699,6 +729,12 @@
         document.getElementById("sig-supervisor").value =
           saved["sig_sup"] || "";
         document.getElementById("sig-employee").value = saved["sig_emp"] || "";
+        markCurrentValuesLocked('input[data-row]');
+        refreshChecklistCellLocks({
+          rowSelector: "table tbody tr",
+          dateInputId: "check-date",
+          times: TIMES,
+        });
       }
 
       function exportToCSV() {
@@ -741,11 +777,16 @@
         link.click();
       }
 
-      document.getElementById("check-date").value = new Date()
-        .toISOString()
-        .split("T")[0];
+      setDefaultIndiaDate("check-date");
       buildRows();
+      setupChecklistCellLocks({
+        rowSelector: "table tbody tr",
+        dateInputId: "check-date",
+        times: TIMES,
+        onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
+      });
       loadDateData();
+      window.addEventListener("load", () => loadLatestData());
 
       // Load latest data from MongoDB
       async function loadLatestData() {
@@ -784,6 +825,12 @@
                   if (inputs[SIG_COL]) inputs[SIG_COL].value = reading.signature || "";
                   if (inputs[REMARKS_COL]) inputs[REMARKS_COL].value = reading.notes || "";
                 }
+              });
+              markCurrentValuesLocked('input[data-row]');
+              refreshChecklistCellLocks({
+                rowSelector: "table tbody tr",
+                dateInputId: "check-date",
+                times: TIMES,
               });
               
               showNotification(`✓ Loaded latest record from ${dateStr}`, 'success');

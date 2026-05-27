@@ -4,6 +4,105 @@
  */
 
 const API_BASE_URL = 'https://globallogic-final.onrender.com/api';
+let apiLoadingCount = 0;
+
+function showLoading(message = 'Loading...') {
+  let loader = document.getElementById('loading-indicator');
+
+  if (!loader) {
+    loader = document.createElement('div');
+    loader.id = 'loading-indicator';
+    loader.setAttribute('role', 'status');
+    loader.setAttribute('aria-live', 'polite');
+    loader.style.cssText = `
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.35);
+      z-index: 10000;
+      backdrop-filter: blur(2px);
+    `;
+    loader.innerHTML = `
+      <div style="
+        min-width: 220px;
+        padding: 22px 26px;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #1f2937;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.28);
+        text-align: center;
+        font-family: Calibri, Segoe UI, Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+      ">
+        <div style="
+          width: 34px;
+          height: 34px;
+          margin: 0 auto 12px;
+          border: 4px solid #dbeafe;
+          border-top-color: #1a5276;
+          border-radius: 50%;
+          animation: api-loader-spin 0.8s linear infinite;
+        "></div>
+        <div id="loading-message"></div>
+      </div>
+    `;
+    document.body.appendChild(loader);
+
+    if (!document.getElementById('api-loader-style')) {
+      const style = document.createElement('style');
+      style.id = 'api-loader-style';
+      style.textContent = '@keyframes api-loader-spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(style);
+    }
+  }
+
+  const messageEl = document.getElementById('loading-message');
+  if (messageEl) messageEl.textContent = message;
+}
+
+function hideLoading() {
+  const loader = document.getElementById('loading-indicator');
+  if (loader) loader.remove();
+}
+
+async function apiRequest(url, options = {}, loadingMessage = 'Loading...', requestOptions = {}) {
+  const showLoader = requestOptions.silent !== true;
+  if (showLoader) {
+    apiLoadingCount += 1;
+    showLoading(loadingMessage);
+  }
+
+  try {
+    const response = await fetch(url, options);
+    return await response.json();
+  } finally {
+    if (showLoader) {
+      apiLoadingCount = Math.max(0, apiLoadingCount - 1);
+      if (apiLoadingCount === 0) hideLoading();
+    }
+  }
+}
+
+function getIndiaDateStringForChecklistClient() {
+  if (typeof getIndiaToday === 'function') return getIndiaToday();
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const map = {};
+  parts.forEach(part => {
+    if (part.type !== 'literal') map[part.type] = part.value;
+  });
+
+  return `${map.year}-${map.month}-${map.day}`;
+}
 
 // ==================== HUB ROOM API ====================
 
@@ -13,16 +112,15 @@ const HubRoomAPI = {
    * @param {Object} data - Checklist data containing readings, signatures, etc.
    * @returns {Promise<Object>} Response from server
    */
-  async save(data) {
+  async save(data, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/hubroom/save`, {
+      return await apiRequest(`${API_BASE_URL}/hubroom/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data)
-      });
-      return await response.json();
+      }, 'Saving Hub Room checklist...', options);
     } catch (error) {
       console.error('HubRoom API Error:', error);
       return {
@@ -36,10 +134,9 @@ const HubRoomAPI = {
   /**
    * Fetch all Hub Room records
    */
-  async getAll() {
+  async getAll(options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/hubroom/all`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/hubroom/all`, {}, 'Loading Hub Room records...', options);
     } catch (error) {
       console.error('HubRoom API Error:', error);
       return {
@@ -53,10 +150,9 @@ const HubRoomAPI = {
   /**
    * Fetch a specific Hub Room record
    */
-  async getById(id) {
+  async getById(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/hubroom/${id}`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/hubroom/${id}`, {}, 'Loading Hub Room record...', options);
     } catch (error) {
       console.error('HubRoom API Error:', error);
       return {
@@ -70,12 +166,11 @@ const HubRoomAPI = {
   /**
    * Delete a Hub Room record
    */
-  async delete(id) {
+  async delete(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/hubroom/${id}`, {
+      return await apiRequest(`${API_BASE_URL}/hubroom/${id}`, {
         method: 'DELETE'
-      });
-      return await response.json();
+      }, 'Deleting Hub Room record...', options);
     } catch (error) {
       console.error('HubRoom API Error:', error);
       return {
@@ -93,16 +188,15 @@ const ServerRoomAPI = {
   /**
    * Save Server Room checklist data
    */
-  async save(data) {
+  async save(data, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/serverroom/save`, {
+      return await apiRequest(`${API_BASE_URL}/serverroom/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data)
-      });
-      return await response.json();
+      }, 'Saving Server Room checklist...', options);
     } catch (error) {
       console.error('ServerRoom API Error:', error);
       return {
@@ -116,10 +210,9 @@ const ServerRoomAPI = {
   /**
    * Fetch all Server Room records
    */
-  async getAll() {
+  async getAll(options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/serverroom/all`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/serverroom/all`, {}, 'Loading Server Room records...', options);
     } catch (error) {
       console.error('ServerRoom API Error:', error);
       return {
@@ -133,10 +226,9 @@ const ServerRoomAPI = {
   /**
    * Fetch a specific Server Room record
    */
-  async getById(id) {
+  async getById(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/serverroom/${id}`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/serverroom/${id}`, {}, 'Loading Server Room record...', options);
     } catch (error) {
       console.error('ServerRoom API Error:', error);
       return {
@@ -150,12 +242,11 @@ const ServerRoomAPI = {
   /**
    * Delete a Server Room record
    */
-  async delete(id) {
+  async delete(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/serverroom/${id}`, {
+      return await apiRequest(`${API_BASE_URL}/serverroom/${id}`, {
         method: 'DELETE'
-      });
-      return await response.json();
+      }, 'Deleting Server Room record...', options);
     } catch (error) {
       console.error('ServerRoom API Error:', error);
       return {
@@ -173,16 +264,15 @@ const UPSAPI = {
   /**
    * Save UPS checklist data
    */
-  async save(data) {
+  async save(data, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/ups/save`, {
+      return await apiRequest(`${API_BASE_URL}/ups/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data)
-      });
-      return await response.json();
+      }, 'Saving UPS checklist...', options);
     } catch (error) {
       console.error('UPS API Error:', error);
       return {
@@ -196,10 +286,9 @@ const UPSAPI = {
   /**
    * Fetch all UPS records
    */
-  async getAll() {
+  async getAll(options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/ups/all`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/ups/all`, {}, 'Loading UPS records...', options);
     } catch (error) {
       console.error('UPS API Error:', error);
       return {
@@ -213,10 +302,9 @@ const UPSAPI = {
   /**
    * Fetch a specific UPS record
    */
-  async getById(id) {
+  async getById(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/ups/${id}`);
-      return await response.json();
+      return await apiRequest(`${API_BASE_URL}/ups/${id}`, {}, 'Loading UPS record...', options);
     } catch (error) {
       console.error('UPS API Error:', error);
       return {
@@ -230,12 +318,11 @@ const UPSAPI = {
   /**
    * Delete a UPS record
    */
-  async delete(id) {
+  async delete(id, options = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/ups/${id}`, {
+      return await apiRequest(`${API_BASE_URL}/ups/${id}`, {
         method: 'DELETE'
-      });
-      return await response.json();
+      }, 'Deleting UPS record...', options);
     } catch (error) {
       console.error('UPS API Error:', error);
       return {
@@ -255,7 +342,7 @@ const UPSAPI = {
  */
 function collectChecklistData(formType) {
   const data = {
-    date: document.querySelector('input[type="date"]')?.value || new Date().toISOString().split('T')[0],
+    date: document.querySelector('input[type="date"]')?.value || getIndiaDateStringForChecklistClient(),
     readings: [],
     checkedBy: document.querySelector('input[name="checkedBy"]')?.value || '',
     supervisorName: document.querySelector('input[name="supervisorName"]')?.value || '',
