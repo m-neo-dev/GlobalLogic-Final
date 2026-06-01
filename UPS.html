@@ -503,22 +503,11 @@
       const response = await UPSAPI.getAll();
       if (response.success && response.data.length > 0) {
         const record = response.data.find(r => r.upsUnit === upsNum) || response.data[0];
+        document.getElementById("ups-unit").value = record.upsUnit || upsNum;
         document.getElementById("check-date").value = record.date.split('T')[0];
-        document.getElementById("sig-supervisor").value = record.supervisorName || "";
-        document.getElementById("sig-employee").value = record.checkedBy || "";
-
-        const rows = document.querySelectorAll("#data-body tr");
-        record.readings.forEach((rd, ri) => {
-          const rowIndex = TIMES.indexOf(rd.time);
-          const row = rows[rowIndex >= 0 ? rowIndex : ri];
-          if (row) {
-            const inputs = row.querySelectorAll("input");
-            inputs.forEach((inp, ci) => {
-              inp.value = rd[`col${ci}`] ?? "";
-              checkThreshold(inp);
-            });
-          }
-        });
+        clearUPSData();
+        populateUPSData(record);
+        localStorage.setItem(`UPS_${record.upsUnit}_${record.date.split('T')[0]}`, JSON.stringify(record));
         markCurrentValuesLocked("#data-body input[data-row]");
         refreshChecklistCellLocks({
           rowSelector: "#data-body tr",
@@ -529,29 +518,52 @@
       }
     }
 
-    function loadDateData() {
-      const date = document.getElementById("check-date").value;
-      const unit = document.getElementById("ups-unit").value;
-      const local = JSON.parse(localStorage.getItem(`UPS_${unit}_${date}`) || "null");
+    function clearUPSData() {
+      document.getElementById("sig-supervisor").value = "";
+      document.getElementById("sig-employee").value = "";
       document.querySelectorAll("#data-body input").forEach((inp) => {
         inp.value = "";
         checkThreshold(inp);
       });
+    }
+
+    function populateUPSData(record) {
+      document.getElementById("sig-supervisor").value = record.supervisorName || "";
+      document.getElementById("sig-employee").value = record.checkedBy || "";
+      const rows = document.querySelectorAll("#data-body tr");
+      (record.readings || []).forEach((rd, ri) => {
+        const rowIndex = Number.isInteger(rd._row) ? rd._row : TIMES.indexOf(rd.time);
+        const row = rows[rowIndex >= 0 ? rowIndex : ri];
+        if (row) {
+          row.querySelectorAll("input").forEach((inp, ci) => {
+            inp.value = rd[`col${ci}`] ?? "";
+            checkThreshold(inp);
+          });
+        }
+      });
+    }
+
+    async function loadDateData() {
+      const date = document.getElementById("check-date").value;
+      const unit = document.getElementById("ups-unit").value;
+      const local = JSON.parse(localStorage.getItem(`UPS_${unit}_${date}`) || "null");
+      clearUPSData();
+
       if (local) {
-        document.getElementById("sig-supervisor").value = local.supervisorName || "";
-        document.getElementById("sig-employee").value = local.checkedBy || "";
-        const rows = document.querySelectorAll("#data-body tr");
-        (local.readings || []).forEach((rd, ri) => {
-          const rowIndex = Number.isInteger(rd._row) ? rd._row : TIMES.indexOf(rd.time);
-          const row = rows[rowIndex >= 0 ? rowIndex : ri];
-          if (row) {
-            row.querySelectorAll("input").forEach((inp, ci) => {
-              inp.value = rd[`col${ci}`] ?? "";
-              checkThreshold(inp);
-            });
+        populateUPSData(local);
+      } else {
+        const response = await UPSAPI.getAll({ silent: true });
+        if (response.success && response.data.length > 0) {
+          const record = response.data.find((r) =>
+            String(r.upsUnit) === String(unit) && r.date && r.date.split('T')[0] === date
+          );
+          if (record) {
+            populateUPSData(record);
+            localStorage.setItem(`UPS_${unit}_${date}`, JSON.stringify(record));
           }
-        });
+        }
       }
+
       markCurrentValuesLocked("#data-body input[data-row]");
       refreshChecklistCellLocks({
         rowSelector: "#data-body tr",

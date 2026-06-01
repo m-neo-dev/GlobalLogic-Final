@@ -3,7 +3,9 @@
  * Handles all communication with the Node.js/Express backend
  */
 
-const API_BASE_URL = 'https://globallogic-final.onrender.com/api';
+const API_BASE_URL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  ? 'http://localhost:5000/api'
+  : 'https://globallogic-final.onrender.com/api';
 let apiLoadingCount = 0;
 
 function showLoading(message = 'Loading...') {
