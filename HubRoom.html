@@ -798,9 +798,8 @@
             const latestRecord = response.data[0]; // Most recent first
             console.log('Latest record:', latestRecord); // DEBUG
             
-            // Set date
-            const dateStr = latestRecord.date.split('T')[0];
-            document.getElementById("check-date").value = dateStr;
+            // Get the current date (keep today's date, don't override with latest record)
+            const dateStr = document.getElementById("check-date").value;
             
             // Set signatures - IMPORTANT: Use these exact field names from MongoDB
             const supField = document.getElementById("sig-supervisor");

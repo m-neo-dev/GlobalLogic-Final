@@ -504,7 +504,7 @@
       if (response.success && response.data.length > 0) {
         const record = response.data.find(r => r.upsUnit === upsNum) || response.data[0];
         document.getElementById("ups-unit").value = record.upsUnit || upsNum;
-        document.getElementById("check-date").value = record.date.split('T')[0];
+        // Keep today's date, don't override with latest record date
         clearUPSData();
         populateUPSData(record);
         localStorage.setItem(`UPS_${record.upsUnit}_${record.date.split('T')[0]}`, JSON.stringify(record));
