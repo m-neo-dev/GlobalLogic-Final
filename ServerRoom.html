@@ -948,8 +948,11 @@
         times: TIMES,
         onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
       });
-      loadDateData();
-      window.addEventListener("load", () => loadLatestData());
+      refreshChecklistCellLocks({
+        rowSelector: "#data-body tr",
+        dateInputId: "check-date",
+        times: TIMES,
+      });
     </script>
 
     <!-- MongoDB API Scripts -->

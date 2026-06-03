@@ -507,7 +507,11 @@
         <div class="capacity-cell">Daily Check Hub Room Temperature</div>
         <div class="date-cell">
           <span>Date:</span>
-          <input type="date" id="check-date" onchange="loadDateData()" value="${new Date().toISOString().split('T')[0]}" />
+          <input
+            type="date"
+            id="check-date"
+            onchange="loadDateData()"
+          />
         </div>
       </div>
 
@@ -785,8 +789,11 @@
         times: TIMES,
         onLockedEdit: () => showNotification("Cell already has saved data and cannot be edited", "error"),
       });
-      loadDateData();
-      window.addEventListener("load", () => loadLatestData());
+      refreshChecklistCellLocks({
+        rowSelector: "table tbody tr",
+        dateInputId: "check-date",
+        times: TIMES,
+      });
 
       // Load latest data from MongoDB
       async function loadLatestData() {
