@@ -856,8 +856,8 @@
             const latestRecord = response.data[0];
             console.log('Latest record:', latestRecord); // DEBUG
             
-            // Get the current date (keep today's date, don't override with latest record)
-            const dateStr = document.getElementById("check-date").value;
+            const dateStr = latestRecord.date.split('T')[0];
+            document.getElementById("check-date").value = dateStr;
             
             const supField = document.getElementById("sig-supervisor");
             const empField = document.getElementById("sig-employee");
