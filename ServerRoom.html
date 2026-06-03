@@ -757,7 +757,7 @@
         }
       }
 
-      function loadDateData() {
+      async function loadDateData() {
         const date = document.getElementById("check-date").value;
         const storageKey = `${SHEET_ID}_${date}`;
         const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
@@ -778,6 +778,59 @@
           dateInputId: "check-date",
           times: TIMES,
         });
+
+        try {
+          const response = await ServerRoomAPI.getAll();
+          if (response.success && response.data.length > 0) {
+            const record = response.data.find((item) =>
+              item.date && item.date.split('T')[0] === date
+            );
+
+            if (record) {
+              const data = {};
+              document.getElementById("sig-supervisor").value = record.supervisorName || "";
+              document.getElementById("sig-employee").value = record.checkedBy || "";
+              data["sig_sup"] = record.supervisorName || "";
+              data["sig_emp"] = record.checkedBy || "";
+
+              const tableRows = document.querySelectorAll("#data-body tr");
+              (record.readings || []).forEach((reading, index) => {
+                if (tableRows[index]) {
+                  const inputs = tableRows[index].querySelectorAll("input");
+                  if (inputs[TEMP_COL]) {
+                    inputs[TEMP_COL].value = reading.temperature || "";
+                    data[`r${index}c${TEMP_COL}`] = inputs[TEMP_COL].value;
+                    checkThreshold(inputs[TEMP_COL]);
+                  }
+                  if (inputs[HUM_COL]) {
+                    inputs[HUM_COL].value = reading.humidity || "";
+                    data[`r${index}c${HUM_COL}`] = inputs[HUM_COL].value;
+                    checkThreshold(inputs[HUM_COL]);
+                  }
+                  if (inputs[SIG_COL]) {
+                    inputs[SIG_COL].value = reading.signature || "";
+                    data[`r${index}c${SIG_COL}`] = inputs[SIG_COL].value;
+                  }
+                  if (inputs[REMARKS_COL]) {
+                    inputs[REMARKS_COL].value = reading.notes || "";
+                    data[`r${index}c${REMARKS_COL}`] = inputs[REMARKS_COL].value;
+                  }
+                }
+              });
+
+              localStorage.setItem(storageKey, JSON.stringify(data));
+              markCurrentValuesLocked("#data-body input[data-row]");
+              refreshChecklistCellLocks({
+                rowSelector: "#data-body tr",
+                dateInputId: "check-date",
+                times: TIMES,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading date data:', error);
+          showNotification('✗ Error loading data', 'error');
+        }
       }
 
       async function saveData() {
@@ -953,6 +1006,7 @@
         dateInputId: "check-date",
         times: TIMES,
       });
+      window.addEventListener("load", () => loadDateData());
     </script>
 
     <!-- MongoDB API Scripts -->

@@ -721,7 +721,7 @@
         }
       }
 
-      function loadDateData() {
+      async function loadDateData() {
         const date = document.getElementById("check-date").value;
         const saved = JSON.parse(
           localStorage.getItem(`${SHEET_ID}_${date}`) || "{}",
@@ -739,6 +739,54 @@
           dateInputId: "check-date",
           times: TIMES,
         });
+
+        try {
+          const response = await HubRoomAPI.getAll();
+          if (response.success && response.data.length > 0) {
+            const record = response.data.find((item) =>
+              item.date && item.date.split('T')[0] === date
+            );
+
+            if (record) {
+              const localData = {};
+              document.getElementById("sig-supervisor").value = record.supervisorName || "";
+              document.getElementById("sig-employee").value = record.checkedBy || "";
+              localData["sig_sup"] = record.supervisorName || "";
+              localData["sig_emp"] = record.checkedBy || "";
+
+              const tableRows = document.querySelectorAll("table tbody tr");
+              (record.readings || []).forEach((reading, index) => {
+                if (tableRows[index]) {
+                  const inputs = tableRows[index].querySelectorAll("input");
+                  if (inputs[TEMP_COL]) {
+                    inputs[TEMP_COL].value = reading.temperature || "";
+                    localData[`r${index}c${TEMP_COL}`] = inputs[TEMP_COL].value;
+                    applyThreshold(inputs[TEMP_COL]);
+                  }
+                  if (inputs[SIG_COL]) {
+                    inputs[SIG_COL].value = reading.signature || "";
+                    localData[`r${index}c${SIG_COL}`] = inputs[SIG_COL].value;
+                  }
+                  if (inputs[REMARKS_COL]) {
+                    inputs[REMARKS_COL].value = reading.notes || "";
+                    localData[`r${index}c${REMARKS_COL}`] = inputs[REMARKS_COL].value;
+                  }
+                }
+              });
+
+              localStorage.setItem(`${SHEET_ID}_${date}`, JSON.stringify(localData));
+              markCurrentValuesLocked('input[data-row]');
+              refreshChecklistCellLocks({
+                rowSelector: "table tbody tr",
+                dateInputId: "check-date",
+                times: TIMES,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading date data:', error);
+          showNotification('✗ Error loading data', 'error');
+        }
       }
 
       function exportToCSV() {
@@ -794,6 +842,7 @@
         dateInputId: "check-date",
         times: TIMES,
       });
+      window.addEventListener("load", () => loadDateData());
 
       // Load latest data from MongoDB
       async function loadLatestData() {

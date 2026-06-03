@@ -551,17 +551,22 @@
 
       if (local) {
         populateUPSData(local);
-      } else {
-        const response = await UPSAPI.getAll({ silent: true });
+      }
+
+      try {
+        const response = await UPSAPI.getAll();
         if (response.success && response.data.length > 0) {
           const record = response.data.find((r) =>
             String(r.upsUnit) === String(unit) && r.date && r.date.split('T')[0] === date
           );
           if (record) {
+            clearUPSData();
             populateUPSData(record);
             localStorage.setItem(`UPS_${unit}_${date}`, JSON.stringify(record));
           }
         }
+      } catch (error) {
+        showNotification("✗ Error loading data", "error");
       }
 
       markCurrentValuesLocked("#data-body input[data-row]");
@@ -585,6 +590,7 @@
       dateInputId: "check-date",
       times: TIMES,
     });
+    window.addEventListener("load", () => loadDateData());
   </script>
 </body>
 
